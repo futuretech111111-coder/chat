@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhisperBox - Secure College Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0f172a',
+                        cardbg: '#1e293b',
+                        accent: '#8b5cf6',
+                        accenthover: '#7c3aed'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); }
+        .stealth-blur { filter: blur(6px); transition: filter 0.2s ease; }
+        .stealth-blur:hover { filter: blur(0px); }
+    </style>
+</head>
+<body class="bg-darkbg text-slate-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Top Navigation / Stealth Bar -->
+    <header class="bg-cardbg border-b border-slate-800 px-6 py-3 flex justify-between items-center z-10">
+        <div class="flex items-center space-x-3">
+            <div class="bg-accent/20 text-accent p-2 rounded-xl">
+                <i class="fa-solid fa-user-secret text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-wide bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">WhisperBox</h1>
+                <p class="text-xs text-slate-400">Zero-Trace College Underground Chat</p>
+            </div>
+        </div>
+
+        <div id="room-info" class="hidden flex items-center space-x-4">
+            <span class="text-xs bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-full text-slate-300">
+                <i class="fa-solid fa-hashtag text-accent mr-1"></i> Room: <strong id="current-room-name" class="text-white"></strong>
+            </span>
+            <button onclick="triggerPanic()" title="Blur all text instantly" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-eye-slash"></i>
+                <span class="hidden sm:inline">Stealth Mode</span>
+            </button>
+            <button onclick="clearChat()" title="Nuke chat history" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-bomb"></i>
+                <span class="hidden sm:inline">Nuke Chat</span>
+            </button>
+            <button onclick="leaveRoom()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                Leave
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 flex overflow-hidden relative">
+
+        <!-- Welcome / Room Selection Screen -->
+        <div id="welcome-screen" class="absolute inset-0 z-20 bg-darkbg flex items-center justify-center p-4">
+            <div class="glass border border-slate-800 p-8 rounded-2xl w-full max-w-md shadow-2xl space-y-6">
+                <div class="text-center space-y-2">
+                    <div class="inline-flex p-3 bg-purple-500/10 text-purple-400 rounded-2xl mb-2 text-3xl">
+                        <i class="fa-solid fa-mask"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">Enter the Underground</h2>
+                    <p class="text-sm text-slate-400">Connect with college friends securely, anonymously, and without leaving a trace.</p>
+                </div>
+
+                <div id="error-banner" class="hidden bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs p-3 rounded-xl text-center"></div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Your Alias / Nickname</label>
+                        <input type="text" id="username-input" placeholder="e.g. PhantomX" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-accent text-white placeholder-slate-600">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Secret Room Code</label>
+                        <input type="text" id="room-input" placeholder="e.g. exam-answers-404" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-accent text-white placeholder-slate-600">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Room Password (Optional)</label>
+                        <input type="password" id="password-input" placeholder="Leave empty for public" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-accent text-white placeholder-slate-600">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <button onclick="joinRoom()" class="w-full bg-accent hover:bg-accenthover text-white font-medium py-3 rounded-xl transition text-sm shadow-lg shadow-purple-500/20">
+                            Join Room
+                        </button>
+                        <button onclick="createRoom()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-3 rounded-xl transition text-sm border border-slate-700">
+                            Create Room
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center pt-2">
+                    <p class="text-[11px] text-slate-500"><i class="fa-solid fa-shield-halved mr-1"></i> End-to-end ephemeral session. Messages vanish when everyone leaves.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div id="chat-screen" class="flex-1 flex flex-col h-full bg-darkbg hidden">
+            <!-- Messages Area -->
+            <div id="messages-container" class="flex-1 overflow-y-auto p-6 space-y-4">
+                <!-- Dynamic messages will appear here -->
+            </div>
+
+            <!-- Stealth Mode Notice Bar -->
+            <div id="stealth-notice" class="hidden px-6 py-1 bg-amber-500/10 text-amber-400 text-xs border-t border-amber-500/20 flex items-center justify-between">
+                <span><i class="fa-solid fa-eye-slash mr-1"></i> Stealth mode active: Messages are blurred. Hover over them to read.</span>
+                <button onclick="triggerPanic()" class="underline text-xs font-bold">Turn Off</button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="bg-cardbg border-t border-slate-800 p-4">
+                <form id="chat-form" onsubmit="sendMessage(event)" class="flex items-center space-x-3 max-w-5xl mx-auto">
+                    <div class="flex items-center space-x-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2">
+                        <input type="checkbox" id="stealth-toggle" title="Send as blurred secret message" class="accent-purple-500 w-4 h-4 cursor-pointer">
+                        <label for="stealth-toggle" title="Send as blurred secret message" class="text-xs text-slate-400 cursor-pointer select-none flex items-center space-x-1">
+                            <i class="fa-solid fa-user-secret text-accent"></i>
+                            <span class="hidden md:inline">Secret</span>
+                        </label>
+                    </div>
+
+                    <input type="text" id="message-input" autocomplete="off" placeholder="Type a message..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-accent text-white placeholder-slate-600">
+
+                    <button type="submit" class="bg-accent hover:bg-accenthover text-white px-6 py-3 rounded-xl transition font-medium text-sm shadow-lg shadow-purple-500/20 flex items-center space-x-2">
+                        <span>Send</span>
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Client Script -->
+    <script>
+        const socket = io();
+        let currentRoom = '';
+        let currentUser = '';
+        let isStealthActive = false;
+
+        // Auto-fill random username if empty
+        const randomNames = ['Ghost', 'Shadow', 'Cipher', 'Phantom', 'Ninja', 'Anony', 'Sneak'];
+        document.getElementById('username-input').value = randomNames[Math.floor(Math.random() * randomNames.length)] + Math.floor(Math.random() * 900 + 100);
+
+        function showError(msg) {
+            const banner = document.getElementById('error-banner');
+            banner.textContent = msg;
+            banner.classList.remove('hidden');
+            setTimeout(() => banner.classList.add('hidden'), 4000);
+        }
+
+        function createRoom() {
+            const username = document.getElementById('username-input').value.trim();
+            const roomId = document.getElementById('room-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!username || !roomId) {
+                showError('Please enter both your alias and room code.');
+                return;
+            }
+            currentUser = username;
+            currentRoom = roomId;
+            socket.emit('create-room', { roomId, password });
+        }
+
+        function joinRoom() {
+            const username = document.getElementById('username-input').value.trim();
+            const roomId = document.getElementById('room-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!username || !roomId) {
+                showError('Please enter both your alias and room code.');
+                return;
+            }
+            currentUser = username;
+            currentRoom = roomId;
+            socket.emit('join-room', { roomId, password });
+        }
+
+        socket.on('error-msg', (msg) => {
+            showError(msg);
+        });
+
+        socket.on('room-joined', ({ roomId }) => {
+            document.getElementById('welcome-screen').classList.add('hidden');
+            document.getElementById('chat-screen').classList.remove('hidden');
+            document.getElementById('room-info').classList.remove('hidden');
+            document.getElementById('current-room-name').textContent = roomId;
+            
+            appendSystemMessage(`Connected to room #${roomId} as ${currentUser}`);
+        });
+
+        socket.on('load-history', (messages) => {
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
+            messages.forEach(msg => renderMessage(msg));
+        });
+
+        socket.on('receive-message', (msg) => {
+            renderMessage(msg);
+        });
+
+        socket.on('room-cleared', () => {
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
+            appendSystemMessage('Chat history was wiped clean!');
+        });
+
+        function sendMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            const isSecret = document.getElementById('stealth-toggle').checked;
+
+            if (!text) return;
+
+            socket.emit('send-message', {
+                roomId: currentRoom,
+                sender: currentUser,
+                text,
+                isSecret
+            });
+
+            input.value = '';
+            document.getElementById('stealth-toggle').checked = false;
+        }
+
+        function renderMessage(msg) {
+            const container = document.getElementById('messages-container');
+            const isSelf = msg.sender === currentUser;
+
+            const div = document.createElement('div');
+            div.className = `flex flex-col ${isSelf ? 'items-end' : 'items-start'} space-y-1`;
+
+            const bubbleClass = isSelf 
+                ? 'bg-purple-600 text-white rounded-2xl rounded-tr-sm' 
+                : 'bg-cardbg border border-slate-800 text-slate-200 rounded-2xl rounded-tl-sm';
+
+            const blurClass = (msg.isSecret || isStealthActive) ? 'stealth-blur cursor-pointer' : '';
+
+            div.innerHTML = `
+                <div class=\"flex items-center space-x-2 text-[11px] text-slate-400 px-1\">
+                    <span class=\"font-semibold ${isSelf ? 'text-purple-300' : 'text-slate-300'}\">${escapeHtml(msg.sender)}</span>
+                    <span>${msg.timestamp}</span>
+                    ${msg.isSecret ? '<span class=\"text-accent bg-accent/10 px-1.5 py-0.5 rounded text-[10px]\"><i class=\"fa-solid fa-user-secret\"></i> Secret</span>' : ''}
+                </div>
+                <div class=\"px-4 py-2.5 max-w-md text-sm shadow-md ${bubbleClass} ${blurClass}\">
+                    ${escapeHtml(msg.text)}
+                </div>
+            `;
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendSystemMessage(text) {
+            const container = document.getElementById('messages-container');
+            const div = document.createElement('div');
+            div.className = 'flex justify-center my-2';
+            div.innerHTML = `<span class=\"bg-slate-800/80 border border-slate-700/50 text-slate-400 text-xs px-3 py-1 rounded-full\"><i class=\"fa-solid fa-circle-info mr-1 text-accent\"></i> ${escapeHtml(text)}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function triggerPanic() {
+            isStealthActive = !isStealthActive;
+            const notice = document.getElementById('stealth-notice');
+            if (isStealthActive) {
+                notice.classList.remove('hidden');
+                document.querySelectorAll('#messages-container > div > div:nth-child(2)').forEach(el => {
+                    el.classList.add('stealth-blur', 'cursor-pointer');
+                });
+            } else {
+                notice.classList.add('hidden');
+                document.querySelectorAll('#messages-container > div > div:nth-child(2)').forEach(el => {
+                    el.classList.remove('stealth-blur', 'cursor-pointer');
+                });
+            }
+        }
+
+        function clearChat() {
+            if (confirm('Are you sure you want to nuke the chat history for everyone in this room?')) {
+                socket.emit('clear-room', { roomId: currentRoom });
+            }
+        }
+
+        function leaveRoom() {
+            window.location.reload();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
